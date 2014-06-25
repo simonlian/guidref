@@ -1,42 +1,81 @@
 #!/c:\python27\python.exe
 #
-#file_io.py
-
+#      Filename:   guidxref.py
+#       Version:   1.0
+#       Written:   Xiang Lian
+# Last Modified:   10/07/2012
+#
+# This is my first hands-on exercise of Python language learning.
+#
+# This python script scans through UDK2010 build tree and saves all GUID definitions into
+# an output file. Refer list TargetFileTypes for currently suported source file types.
+#
+#
 import os, re, string, sys
 
 
 #
 # Global variables
 #
-ContinueEol = "\\\n"
-DefineGuid  = "#define"
-Guid_In_h   = "\{\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*\{\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\
-\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*0x([0-9A-F])+,\s*0x([0-9A-F])+\s*\}\s*\}"
+
+# This list provides all the file types to be scanned
+TargetFileTypes = ['.h', '.dec', '.inf', '.dsc']
+
+# This defines the continuation character at end of line
+ContinuingEol = "\\\n"
+
+# Define directive in GUID definition (usually in .h files)
+DefineDirective = "^#define"
+
+# Header part of the GUID definition line (usually in INF or DSC files)
+RegGuidDef = "^.*\=\s*"          #lx-note: "^\(.*\)\=\s*" doesn't work!
+
+# GUID Definitive format - Below pattern matches lines like: 
+#      { 0xbf9d5465, 0x4fc3, 0x4021, {0x92, 0x5, 0xfa, 0x5d, 0x3f, 0xe2, 0xa5, 0x95}}
+Guid_In_h = "\{\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*\{\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\
+\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*0x[0-9A-F]+,\s*0x[0-9A-F]+\s*\}\s*\}"
+
+# GUID Registry format - Below pattern matches lines like:  FILE_GUID = A5102DBA-C528-47bd-A992-A2906ED0D22B
+Guid_In_Inf = "[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+"
 
 
 
-def SearchGuidsFromList (SrcList):
+#################################### Functions Definition #################################################
+
+def SearchGuidsFromList (SrcList, filename):
   """ This function searchs for GUID definitions from a given string list.
 
   """
   GuidLines = []
   for n,line in enumerate(SrcList):
-    while line.endswith(ContinueEol):
-      line = line.rstrip(ContinueEol)
+    while line.endswith(ContinuingEol):
+      line = line.rstrip(ContinuingEol)
       #this doesnt work?? line = re.sub("\\\n", "", line)
       MergeLine = [line, SrcList[n+1]]
-      line = "".join(MergeLine)
+      line = "".join(MergeLine)      # This converts a list to a string
       del SrcList[n+1]
       #print "line #n", n,line
       #print "line #n+1", n+1,SrcList[n+1]
   
     # Now start searching for GUID pattern
-    match1 = re.search(DefineGuid, line, re.I | re.M)
-    if match1:
-      match2 = re.search(Guid_In_h, line, re.I | re.M)
-      if match2:
-        #print "Find a matching GUID line"
-        GuidLines.append(line)
+    #lx-We do not need to match this as it's within a single line now.
+    #lx match0 = re.search(DefineDirective, line, re.I | re.M)
+    #lx if match0:
+    match = re.search(Guid_In_h, line, re.I | re.M)
+    if match:
+      #print "Found a matching GUID line"
+      line = re.sub(DefineDirective, "", line)     # Trim out useless part
+      line = line.lstrip()
+      GuidLines.append(line)
+
+    # for INF and DSC files
+    match = re.search(Guid_In_Inf, line, re.I | re.M)
+    if match:
+      #print "Found a matching GUID line"
+      line = re.sub(RegGuidDef, filename + "  ", line)     # Trim out useless part
+      line = line.lstrip()
+      GuidLines.append(line)
+      #debug str = raw_input ("Press ENTER key to continue:")
 
   return GuidLines
 
@@ -65,9 +104,10 @@ def main():
     for Dir in SearchFileDb:
       ChosenFiles = []
       for file in SearchFileDb[Dir]:
-        if file.endswith(".h"):
-          #print "Found needed files = ", file
-          ChosenFiles.append(file)
+        for type in TargetFileTypes:
+          if file.endswith(type):
+            #print "Found needed files = ", file
+            ChosenFiles.append(file)
       SearchFileDb[Dir] = ChosenFiles
   
   #print "Dict =", SearchFileDb
@@ -87,13 +127,13 @@ def main():
         fullpath = os.path.join(folder, "".join(file))
         ifile=open(fullpath, "r")
       except:
-        print folder, "\\", file, " could not be opened!"
+        print folder, "\\", file, " could not be opened, abort!"
         sys.exit(2)
   
       AllLines = ifile.readlines()
-      GuidList = SearchGuidsFromList (AllLines)
+      GuidList = SearchGuidsFromList (AllLines, "".join(file))
       if (len(GuidList) > 0):
-        OutputLineWidth = 90 - len(fullpath)
+        OutputLineWidth = 100 - len(fullpath)
         print fullpath, "." * OutputLineWidth, len(GuidList)
         TotalGuids = TotalGuids + len(GuidList)
         for line in GuidList:
@@ -104,7 +144,7 @@ def main():
 
 
 
-
+#lx-Why do I need this?
 if __name__ == "__main__":
 		main()
 
