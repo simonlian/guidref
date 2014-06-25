@@ -2,6 +2,13 @@
 #
 #      Filename:   guidxref.py
 #       Written:   Xiang Lian
+#
+#
+# This python script scans through UDK2010 build tree and saves all GUID definitions into
+# an output file. Refer list TargetFileTypes for currently suported source file types.
+#
+#-------------------------------------------------------------------------------------------------
+#
 #   Rev history:   rev 1.0    10/07/2012
 #                       - Guid_In_h had missed some lower-cased GUIDs;
 #
@@ -11,17 +18,15 @@
 #                  rev 1.2    10/08/2012
 #                       - Swapped content in output line so that GUID strings always come first
 #
+#                  rev 1.5    10/08/2012
+#                       - Simplified os.walk logic to significantly reduce the redundant scans
+#                       - Added summary to report total number of files scanned by type
 #
 #
 #
 #
-#####################################################################################################
 #
-# This is my first hands-on exercise of Python language learning.
-#
-# This python script scans through UDK2010 build tree and saves all GUID definitions into
-# an output file. Refer list TargetFileTypes for currently suported source file types.
-#
+#----------------------------------------------------------------------------------------------------
 #
 import os, re, string, sys
 
@@ -31,7 +36,7 @@ import os, re, string, sys
 #
 
 # This list provides all the file types to be scanned
-TargetFileTypes = ['.h', '.dec', '.inf', '.dsc']
+TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0}
 
 # This defines the continuation character at end of line
 ContinuingEol = "\\\n"
@@ -93,7 +98,7 @@ def SearchGuidsFromList (SrcList, filename):
       line = line.lstrip()
       line = re.sub("\A(.*?)\s+(.*)", r"\2  \1", line)    # Swap it. lx-'\A' and '?' are both important
       GuidLines.append(line)
-      #debug str = raw_input ("Press ENTER key to continue:")
+      #debug str = raw_input ("................................................. Press ENTER key to continue:")
 
     # Process .h and .dec files
     match = re.search(Guid_In_h, line, re.IGNORECASE | re.MULTILINE)
@@ -120,55 +125,49 @@ def main():
     print "Invalid directory name, please try again!"
     exit(1)
   
-  # Traverse the folder path and search for required source files
-  SearchFileDb = {}       # This is a database of dir:files pairs
-  for root, dirs, files in os.walk(RootDir):
-    if '.svn' in dirs:
-      dirs.remove('.svn') 
-    #print "root = ", root
-    #print "dirs = ", dirs
-    SearchFileDb[root] = files
-  
-    for Dir in SearchFileDb:
-      ChosenFiles = []
-      for file in SearchFileDb[Dir]:
-        for type in TargetFileTypes:
-          if file.endswith(type):
-            #print "Found needed files = ", file
-            ChosenFiles.append(file)
-      SearchFileDb[Dir] = ChosenFiles
-  
-  #print "Dict =", SearchFileDb
-  #print "Dict keys()=", SearchFileDb.keys()
-  #print "Dict values()=", SearchFileDb.values()
-  
   # Create output file
   ofile = open("guidxref.txt", "w")
 
-  # Search for qualified GUID lines in each file
+  # Traverse the folder path and search for required source files
   TotalGuids = 0
-  for folder in SearchFileDb.keys():           # equivalent of looping through SearchFileDb
-    for file in SearchFileDb[folder]:
-      #print "Search folder=", folder
-      #print "Search file=", file
-      try:
-        fullpath = os.path.join(folder, "".join(file))
-        ifile=open(fullpath, "r")
-      except:
-        print folder, "\\", file, " could not be opened, abort!"
-        sys.exit(2)
+  for root, dirs, files in os.walk(RootDir):
+    #print "root = ", root
+    #print "dirs = ", dirs
+    #for file in files:
+    #  print "file = ", file
   
-      AllLines = ifile.readlines()
-      GuidList = SearchGuidsFromList (AllLines, "".join(file))
-      if (len(GuidList) > 0):
-        OutputLineWidth = 100 - len(fullpath)
-        print fullpath, "." * OutputLineWidth, len(GuidList)
-        TotalGuids = TotalGuids + len(GuidList)
-        for line in GuidList:
-          ofile.write(line)
-  
-      ifile.close()
-  print "Total of GUIDs found: ", TotalGuids 
+    for file in files:
+      for type in TargetFileTypes.keys():
+        if file.endswith(type):
+          #print "Found needed files = ", dirs, "\\", file
+          TargetFileTypes[type] += 1
+
+          # Scan the file for GUID strings
+          try:
+            fullpath = os.path.join(root, "".join(file))
+            ifile = open(fullpath, "r")
+          except:
+            print folder, "\\", file, " could not be opened, abort!"
+            sys.exit(2)
+          
+          #print fullpath, "............... opened successfully"
+          AllLines = ifile.readlines()
+          GuidList = SearchGuidsFromList (AllLines, "".join(file))
+          if (len(GuidList) > 0):
+            OutputLineWidth = 110 - len(fullpath)
+            print fullpath, "." * OutputLineWidth, len(GuidList)
+            TotalGuids += len(GuidList)
+            for line in GuidList:
+              ofile.write(line)
+          
+          ifile.close()
+
+  # Print summary
+  print "\n", "-" * 45, "Summary", "-" * 55
+  for type in TargetFileTypes.keys():
+    print "File type: ", type, TargetFileTypes[type], "files"
+
+  print "\nTotal number of GUIDs found: ", TotalGuids 
 
 
 
