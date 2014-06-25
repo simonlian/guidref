@@ -32,20 +32,35 @@
 #                       - Created function NormalizeGuidString to replace the buggy RegFormatOutput pattern.
 #                         Now all output GUIDs have a fixed length and are made uppercase
 #
+#                  rev 2.2    10/11/2012
+#                       - Added list ExcludedDirs which folders will not be scanned
+#                       - Added lambda function toU to conver registry format GUIDs to uppercase
+#                       - Output filenames are now including timestamp strings
+#                       - Logging filenames are always saved into a newly created file (suffixed with seq#)
+#
+#
+#
+#
+#
+#
 #
 #----------------------------------------------------------------------------------------------------
 #
 import os, re, string, sys
 import logging
+import datetime
 
 
 #
 # Global variables
 #
-ScriptRev = " Ver 2.0"
+ScriptRev = " Ver 2.2"
 
 # This list provides all the file types to be scanned
 TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0}
+
+# Directories to be excluded from the scan
+ExcludedDirs = ('.svn', 'Build')
 
 # This defines the continuation character at end of line
 ContinuingEol = "\\\n"
@@ -71,25 +86,25 @@ Guid_In_h = "\{\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+)\s*\}\s*\}"
 
-#This is buggy, has already been replaced by NormalizeGuidString
+#This is buggy, has already been replaced by NormalizeGuidString2
 RegFormatOutput = r"\1-\2-\3-\4\5-\6\7\8\9\10\11"   # Note: have to add prefix 'r' to make it raw here
 
 # GUID Registry format - Below pattern matches lines like:  FILE_GUID = A5102DBA-C528-47bd-A992-A2906ED0D22B
-Guid_In_Inf = "[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+"
+Guid_In_Inf = "[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+"
 
 
 #################################### Functions Definition #################################################
 
 def NormalizeGuidString (matchobj):
-  """ GUID string normalization - Prefixing with 0s for every captured group
+  """ Definitive format GUID string normalization - Prefixing with 0s for every captured group
       
       Parameter matchobj is a MatchObject instance which contains one or more subgroups of the pattern
       match done by the re.sub() method. It's same as the return object of re.search(). 
 
   """
-  hex = ["","","","","","","","","","","","",""]
+  hex = [""]
   for i in range (1, 12):
-    hex[i] = matchobj.group(i)
+    hex.append(matchobj.group(i))
   hex[1]  = format (int(hex[1],  16), '08x').upper()
   hex[2]  = format (int(hex[2],  16), '04x').upper()
   hex[3]  = format (int(hex[3],  16), '04x').upper()
@@ -127,16 +142,18 @@ def SearchGuidsFromList (SrcList, filename):
     match = re.search(Guid_In_Inf, line, re.IGNORECASE | re.MULTILINE)
     if match:
       logging.debug ("Found a matching GUID")
-      line = re.sub(RegGuidDef, filename + "  ", line)    # Trim out useless part
+      line = re.sub(RegGuidDef, filename + "  ", line)       # Trim out useless part
+      line = re.sub(Guid_In_Inf, lambda toU: toU.group().upper(), line) # Convert GUID to uppercase
+      #str = raw_input ("................................................. Press ENTER key to continue:")
       line = line.lstrip()
-      line = re.sub("\A(.*?)\s+(.*)", r"\2  \1", line)    # Swap it. lx-'\A' and '?' are both important
+      line = re.sub("\A(.*?)\s+(.*)", r"\2  \1", line)       # Swap it. lx-'\A' and '?' are both important
       GuidLines.append(line)
 
     # Process .h and .dec files
     match = re.search(Guid_In_h, line, re.IGNORECASE | re.MULTILINE)
     if match:
       logging.debug ("Found a matching GUID")
-      line = re.sub(DefineDirective, "", line)            # Trim out useless part
+      line = re.sub(DefineDirective, "", line)             # Trim out useless part
       line = re.sub(Guid_In_h, NormalizeGuidString, line) # Convert to registry format
       #str = raw_input ("................................................. Press ENTER key to continue:")
       line = line.lstrip()
@@ -162,7 +179,13 @@ def main():
   # Valid values to set for level (by severity) in basicConfig are: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
   #
   #full format: logging.basicConfig(level=logging.DEBUG, filename='debug.log', format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-  #logging.basicConfig(level=logging.ERROR, filename='debug.log', format='%(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+  if 0:   #lx-To generate logging output, change this to '1'
+    for seq in range (0, 99):
+      LogFileName = ".\debug" + format (seq, '02d') + ".log"
+      if not os.path.exists(LogFileName):
+        break
+      seq += 1
+    logging.basicConfig(level=logging.INFO, filename=LogFileName, format='%(levelname)s: %(message)s')
 
   # Ensure input parameter is valid
   if len(sys.argv) < 2:
@@ -175,20 +198,22 @@ def main():
     exit(1)
   
   # Determine output file
-  for x in range (0, 99):
-    OutputFileName = ".\guidxref" + format (x, '02d') + ".txt"
-    if not os.path.exists(OutputFileName):
-      break
-    x += 1
+  now = datetime.datetime.now()
+  suffix = now.strftime ("%Y_%m_%d_%H_%M_%S")
 
-  ofile = open(OutputFileName, "w")
+  ofile = open("guidxref_" + suffix + ".txt", "w")
   # Print header message
   ofile.write("Generated by " + sys.argv[0] + ScriptRev + "\n")
   ofile.write("=" * 40 + "\n\n")
 
-  # Traverse the folder path and search for required source files
+  # Traverse the root directory path for required source files
   TotalGuids = 0
   for root, dirs, files in os.walk(RootDir):
+    # Check directories to be excluded from the scan
+    for folder in ExcludedDirs:
+      if folder in dirs:
+        dirs.remove(folder)
+
     logging.debug ('  root = %s', root)
     #logging.debug ('  dirs = %s', dirs)
     #for file in files:
