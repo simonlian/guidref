@@ -46,6 +46,8 @@
 #                       - Collected all user customizable values/configs into class UserConfig
 #                       - Minor adjustment on summary output
 #
+#                  rev 3.2    10/25/2012
+#                       - Modified Guid_In_h pattern to match wider range of GUID formats (in EDK)
 #
 #
 #----------------------------------------------------------------------------------------------------
@@ -62,7 +64,7 @@ class UserConfig:
   """ This class defines a set of constants and configurations which can be customized by 
       the script user. 
   """
-  ScriptRev = " Ver 3.1"
+  ScriptRev = " Ver 3.2"
 
   # To generate logging output, change this to 1
   LoggingEnable = 0
@@ -74,7 +76,7 @@ class UserConfig:
   TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0}
 
   # Directories to be excluded from the scan
-  ExcludedDirs = ('.svn', 'Build')
+  ExcludedDirs = ('.svn', 'Build', 'uefi64native')
 
   # Base file name for result output
   BaseOutputName = "guidxref_"
@@ -98,7 +100,7 @@ RegGuidDef = "^.*\=\s*"          #note: "^\(.*\)\=\s*" doesn't work!
 Guid_In_h = "\{\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\{\s*\
+0x([0-9a-fA-F]+),\s*[{]*\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+),\s*\
@@ -106,7 +108,7 @@ Guid_In_h = "\{\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+),\s*\
 0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+)\s*\}\s*\}"
+0x([0-9a-fA-F]+)\s*[}]*\s*\}"
 
 #This is buggy, has already been replaced by NormalizeGuidString2
 RegFormatOutput = r"\1-\2-\3-\4\5-\6\7\8\9\10\11"   # Note: have to add prefix 'r' to make it raw here
