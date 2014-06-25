@@ -38,8 +38,9 @@
 #                       - Output filenames are now including timestamp strings
 #                       - Logging filenames are always saved into a newly created file (suffixed with seq#)
 #
-#
-#
+#                  rev 3.0    10/11/2012
+#                       - Added filter to remove some invalid lines in the output
+#                       - Output lines are sorted and all duplicates removed
 #
 #
 #
@@ -54,7 +55,7 @@ import datetime
 #
 # Global variables
 #
-ScriptRev = " Ver 2.2"
+ScriptRev = " Ver 3.0"
 
 # This list provides all the file types to be scanned
 TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0}
@@ -208,6 +209,7 @@ def main():
 
   # Traverse the root directory path for required source files
   TotalGuids = 0
+  TempBuffer = []
   for root, dirs, files in os.walk(RootDir):
     # Check directories to be excluded from the scan
     for folder in ExcludedDirs:
@@ -239,11 +241,34 @@ def main():
           if (len(GuidList) > 0):
             OutputLineWidth = 110 - len(fullpath)
             print fullpath, "." * OutputLineWidth, len(GuidList)
-            TotalGuids += len(GuidList)
             for line in GuidList:
-              ofile.write(line)
-          
+              # Remove some invalid lines
+              if not re.search (r"\/\/$", line, re.MULTILINE):    #lx: "\Z" and "\z" don't work. ??
+                TempBuffer.append(line)
+
           ifile.close()
+
+  # Remove duplicates from the list
+  #
+  # [Python.docs] A set object is an **unordered** collection of distinct hashable objects. Common uses 
+  # include membership testing, removing duplicates from a sequence, and computing mathematical operations 
+  # such as intersection, union, difference, and symmetric difference.
+  #
+  TempBuffer = list(set(TempBuffer))
+
+  # Now sort the list
+  #
+  # [Python.docs] sorted (iterable [, key][, reverse])
+  #
+  #   key - specifies a function of one argument that is used to extract a comparison key from
+  #         each list element: key=str.lower. The default value is None (compare the elements directly)
+  #   reverse - a boolean value. If set to True, the list elements are sorted as if each comparison 
+  #             were reversed.
+  #
+  TempBuffer = sorted(TempBuffer)
+  for line in TempBuffer:
+    TotalGuids += 1
+    ofile.write(line)
 
   # Print summary
   print "\n", "-" * 50, "Summary", "-" * 55
