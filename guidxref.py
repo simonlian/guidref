@@ -22,6 +22,11 @@
 #                       - Simplified os.walk logic to significantly reduce the redundant scans
 #                       - Added summary to report total number of files scanned by type
 #
+#                  rev 1.6    10/08/2012
+#                       - Added logging module, to turn on logging output:
+#                             . Uncomment the logging.basicConfig line
+#                             . Choose level in basicConfig
+#                       - Always save result into a newly create output file
 #
 #
 #
@@ -29,6 +34,7 @@
 #----------------------------------------------------------------------------------------------------
 #
 import os, re, string, sys
+import logging
 
 
 #
@@ -82,8 +88,7 @@ def SearchGuidsFromList (SrcList, filename):
       MergeLine = [line, SrcList[n+1]]
       line = "".join(MergeLine)      # This converts a list to a string
       del SrcList[n+1]
-      #print "line #n", n,line
-      #print "line #n+1", n+1,SrcList[n+1]
+      #logging.debug ("  Merged line #%d, %s", n, line)
   
     # Now start searching for GUID pattern
     #lx-We do not need to match this as it's within a single line now.
@@ -93,7 +98,7 @@ def SearchGuidsFromList (SrcList, filename):
     # Process .inf and .dsc files
     match = re.search(Guid_In_Inf, line, re.IGNORECASE | re.MULTILINE)
     if match:
-      #print "Found a matching GUID line"
+      logging.debug ("Found a matching GUID")
       line = re.sub(RegGuidDef, filename + "  ", line)    # Trim out useless part
       line = line.lstrip()
       line = re.sub("\A(.*?)\s+(.*)", r"\2  \1", line)    # Swap it. lx-'\A' and '?' are both important
@@ -103,7 +108,7 @@ def SearchGuidsFromList (SrcList, filename):
     # Process .h and .dec files
     match = re.search(Guid_In_h, line, re.IGNORECASE | re.MULTILINE)
     if match:
-      #print "Found a matching GUID line"
+      logging.debug ("Found a matching GUID")
       line = re.sub(DefineDirective, "", line)            # Trim out useless part
       line = re.sub(Guid_In_h, RegFormatOutput, line)     # Convert to registry format
       line = line.lstrip()
@@ -115,6 +120,22 @@ def SearchGuidsFromList (SrcList, filename):
 
 def main():
 
+  # Configure the logging module to send debug messages to file
+  #
+  # Refer:
+  #    logging.debug (msg, *args)
+  #    logging.info (msg, *args)
+  #    logging.warning (msg, *args)
+  #    logging.error (msg, *args)
+  #    logging.critical (msg, *args)
+  #    logging.setLevel (level)
+  #    logging.disable (level)
+  #
+  # Valid values to set for level (by severity) in basicConfig are: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
+  #
+  #full format: logging.basicConfig(level=logging.DEBUG, filename='debug.log', format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+  #logging.basicConfig(level=logging.ERROR, filename='debug.log', format='%(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
   # Ensure input parameter is valid
   if len(sys.argv) < 2:
     print "Usage - ", sys.argv[0], " <Directory>\n"
@@ -125,21 +146,27 @@ def main():
     print "Invalid directory name, please try again!"
     exit(1)
   
-  # Create output file
-  ofile = open("guidxref.txt", "w")
+  # Determine output file
+  for x in range (0, 99):
+    OutputFileName = ".\guidref" + format (x, '02d') + ".txt"
+    if not os.path.exists(OutputFileName):
+      break
+    x += 1
+
+  ofile = open(OutputFileName, "w")
 
   # Traverse the folder path and search for required source files
   TotalGuids = 0
   for root, dirs, files in os.walk(RootDir):
-    #print "root = ", root
-    #print "dirs = ", dirs
+    logging.debug ('  root = %s', root)
+    #logging.debug ('  dirs = %s', dirs)
     #for file in files:
-    #  print "file = ", file
+    #logging.debug ('  file = %s', file)
   
     for file in files:
       for type in TargetFileTypes.keys():
         if file.endswith(type):
-          #print "Found needed files = ", dirs, "\\", file
+          logging.info ("Found needed files = %s\\%s", root, file)
           TargetFileTypes[type] += 1
 
           # Scan the file for GUID strings
@@ -150,7 +177,7 @@ def main():
             print folder, "\\", file, " could not be opened, abort!"
             sys.exit(2)
           
-          #print fullpath, "............... opened successfully"
+          logging.debug ('Opening source file ........%s', fullpath)
           AllLines = ifile.readlines()
           GuidList = SearchGuidsFromList (AllLines, "".join(file))
           if (len(GuidList) > 0):
@@ -163,15 +190,21 @@ def main():
           ifile.close()
 
   # Print summary
-  print "\n", "-" * 45, "Summary", "-" * 55
+  print "\n", "-" * 50, "Summary", "-" * 55
   for type in TargetFileTypes.keys():
     print "File type: ", type, TargetFileTypes[type], "files"
 
   print "\nTotal number of GUIDs found: ", TotalGuids 
 
 
-
-#lx-Why do I need this?
+#
+# Why do we need this?
+# A .py file can be interpreted by Python as either standalone program to execute directly,
+# or a module to be imported into other .py files. 
+#   1) Standalone program - __name__ equals to "__main__"; 
+#   2) imported as a module - __name__ equals to something else, therefore contents behind
+#      the if statement won't get executed.
+#
 if __name__ == "__main__":
-		main()
+  main()
 
