@@ -52,7 +52,20 @@
 #                  rev 3.3    10/30/2012
 #                       - Defined VimScriptMode switch to output result in vim script format
 #
+#                  rev 3.4    10/31/2012
+#                       - Added .c into the scan file list (TargetFileTypes)
+#                       - Added (?i) in Guid_In_h: This makes the entire pattern case in-sensitive
+#                       - Resolved lines like: EFI_GUID  PciIoProtocolInstallEventGuid = {...};
+#                       - Resolved lines containing tabs
+#                       - No more year info in result file name
 #
+#
+# Cases currently cannot be handled:
+#
+#    EFI_GUID  gEfiUsbKeyboardDriverGuid = {
+#      0xa05f5f78, 0xfb3, 0x4d10, 0x90, 0x90, 0xac, 0x4, 0x6e, 0xeb, 0x7c, 0x3c
+#    };
+# 
 #----------------------------------------------------------------------------------------------------
 #
 import os, re, string, sys
@@ -67,19 +80,19 @@ class UserConfig:
   """ This class defines a set of constants and configurations which can be customized by 
       the script user. 
   """
-  ScriptRev = " Ver 3.3"
+  ScriptRev = " Ver 3.4"
 
   # To generate logging output, change this to 1
   LoggingEnable = 0
 
   # Set this to 1 to generate the result file in vim script format
-  VimScriptMode = 1
+  VimScriptMode = 0
 
   # The maximum character width of the console output line
   MAXLINEWIDTH = 110
 
   # This list provides all the file types to be scanned
-  TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0}
+  TargetFileTypes = {'.h' : 0, '.dec' : 0, '.inf' : 0, '.dsc' : 0, '.c' : 0}
 
   # Directories to be excluded from the scan
   ExcludedDirs = ('.svn', 'Build', 'uefi64native')
@@ -95,7 +108,7 @@ class UserConfig:
 # This defines the continuation character at end of line
 ContinuingEol = "\\\n"
 
-# Define directive in GUID definition (usually in .h files)
+# Define directive in GUID definition (usually in .h and .c files)
 DefineDirective = "^#define"
 
 # Header part of the GUID definition line (usually in INF or DSC files)
@@ -103,18 +116,18 @@ RegGuidDef = "^.*\=\s*"          #note: "^\(.*\)\=\s*" doesn't work!
 
 # GUID Definitive format - Below pattern matches lines like: 
 #      { 0xbf9d5465, 0x4fc3, 0x4021, {0x92, 0x5, 0xfa, 0x5d, 0x3f, 0xe2, 0xa5, 0x95}}
-Guid_In_h = "\{\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*{?\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+),\s*\
-0x([0-9a-fA-F]+)\s*}?\s*\}.*"
+Guid_In_h = "(?i)\{\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*{?\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+),\s*\
+0x([0-9a-f]+)\s*}?\s*\}.*"
 
 #This is buggy, has already been replaced by NormalizeGuidString2
 RegFormatOutput = r"\1-\2-\3-\4\5-\6\7\8\9\10\11"   # Note: have to add prefix 'r' to make it raw here
@@ -166,7 +179,7 @@ def SearchGuidsFromList (SrcList, filename):
     # Process .inf and .dsc files
     match = re.search(Guid_In_Inf, line, re.IGNORECASE | re.MULTILINE)
     if match:
-      logging.debug ("Found valid GUID")
+      logging.debug ("Found a registry format GUID")
       line = re.sub(RegGuidDef, filename + "  ", line)       # Trim out useless part
       line = re.sub(Guid_In_Inf, lambda toU: toU.group().upper(), line) # Convert GUID to uppercase
       #str = raw_input ("................................................. Press ENTER key to continue:")
@@ -177,12 +190,13 @@ def SearchGuidsFromList (SrcList, filename):
     # Process .h and .dec files
     match = re.search(Guid_In_h, line, re.IGNORECASE | re.MULTILINE)
     if match:
-      logging.debug ("Found valid GUID")
+      logging.debug ("Found a definitive GUID")
       line = re.sub(DefineDirective, "", line)             # Trim out useless part
-      line = re.sub(Guid_In_h, NormalizeGuidString, line) # Convert to registry format
+      line = re.sub(Guid_In_h, NormalizeGuidString, line)  # Convert to registry format
       #str = raw_input ("................................................. Press ENTER key to continue:")
+      line = re.sub(r"\A(.*?)EFI_GUID\s+", "", line)   # Trim EFI_GUID 
       line = line.lstrip()
-      line = re.sub("\A(.*?)[ =]+(.*)", r"\2  \1", line)  # Swap it. lx-'\A' and '?' are both important
+      line = re.sub("\A(.*?)[ =\t]+(.*)", r"\2  \1", line)   # Swap it. lx-'\A' and '?' are both important
       GuidLines.append(line)
 
   return GuidLines
@@ -224,7 +238,8 @@ def main():
   
   # Determine output file
   now = datetime.datetime.now()
-  suffix = now.strftime ("%Y_%m_%d_%H_%M_%S")
+  ##suffix = now.strftime ("%Y_%m_%d_%H_%M_%S")
+  suffix = now.strftime ("%m_%d_%H_%M_%S")
 
   if UserConfig.VimScriptMode == 0:
     ofile = open(UserConfig.BaseOutputName + suffix + ".txt", "w")
