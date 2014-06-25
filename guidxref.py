@@ -59,6 +59,13 @@
 #                       - Resolved lines containing tabs
 #                       - No more year info in result file name
 #
+#                  rev 3.5    10/31/2012
+#                       - Added NormalizedGuidLine for final validity check
+#
+#
+#
+#
+#
 #
 # Cases currently cannot be handled:
 #
@@ -80,7 +87,7 @@ class UserConfig:
   """ This class defines a set of constants and configurations which can be customized by 
       the script user. 
   """
-  ScriptRev = " Ver 3.4"
+  ScriptRev = " Ver 3.5"
 
   # To generate logging output, change this to 1
   LoggingEnable = 0
@@ -109,7 +116,7 @@ class UserConfig:
 ContinuingEol = "\\\n"
 
 # Define directive in GUID definition (usually in .h and .c files)
-DefineDirective = "^#define"
+DefineDirective = "#define"
 
 # Header part of the GUID definition line (usually in INF or DSC files)
 RegGuidDef = "^.*\=\s*"          #note: "^\(.*\)\=\s*" doesn't work!
@@ -134,6 +141,9 @@ RegFormatOutput = r"\1-\2-\3-\4\5-\6\7\8\9\10\11"   # Note: have to add prefix '
 
 # GUID Registry format - Below pattern matches lines like:  FILE_GUID = A5102DBA-C528-47bd-A992-A2906ED0D22B
 Guid_In_Inf = "[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+-[0-9a-fA-F]+"
+
+# Normalized GUID lines like: A5102DBA-C528-47bd-A992-A2906ED0D22B  xxxx
+NormalizedGuidLine = r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}  [^#]+"
 
 
 #################################### Functions Definition #################################################
@@ -312,10 +322,20 @@ def main():
   #
   TempBuffer = sorted(TempBuffer)
   for line in TempBuffer:
-    TotalGuids += 1
-    if UserConfig.VimScriptMode:
-      line = re.sub(r"\A([^ ]*)  (.*)$", r":%s/\1/\2/e", line)
-    ofile.write(line)
+    if re.match(NormalizedGuidLine, line):
+      #
+      # Ideally we don't need to add this extra validity check on each processed line. However there
+      # are always some corner cases or various special cases which cannot be well handled by current
+      # code logic. These filtered lines here can later be investigated when I have spare time.
+      # 
+      TotalGuids += 1
+      if UserConfig.VimScriptMode:
+        line = re.sub(r"\A([^ ]*)  (.*)$", r":%s/\1/\2/e", line)
+      ofile.write(line)
+    else:
+      #lx-Adding following lines will unexpectedly remove the next line as well, why?
+      #TempBuffer.remove(line)
+      print "Invalid line: ", line
 
   ofile.close()
 
