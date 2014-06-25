@@ -8,6 +8,13 @@
 #                  rev 1.1    10/07/2012
 #                       - Added captured groups in Guid_In_h, refer RegFormatOutput;
 #
+#                  rev 1.2    10/08/2012
+#                       - Swapped content in output line so that GUID strings always come first
+#
+#
+#
+#
+#
 #####################################################################################################
 #
 # This is my first hands-on exercise of Python language learning.
@@ -33,7 +40,7 @@ ContinuingEol = "\\\n"
 DefineDirective = "^#define"
 
 # Header part of the GUID definition line (usually in INF or DSC files)
-RegGuidDef = "^.*\=\s*"          #lx-note: "^\(.*\)\=\s*" doesn't work!
+RegGuidDef = "^.*\=\s*"          #note: "^\(.*\)\=\s*" doesn't work!
 
 # GUID Definitive format - Below pattern matches lines like: 
 #      { 0xbf9d5465, 0x4fc3, 0x4021, {0x92, 0x5, 0xfa, 0x5d, 0x3f, 0xe2, 0xa5, 0x95}}
@@ -54,7 +61,6 @@ RegFormatOutput = r"\1-\2-\3-\4\5-\6\7\8\9\10\11"   # Note: have to add prefix '
 
 # GUID Registry format - Below pattern matches lines like:  FILE_GUID = A5102DBA-C528-47bd-A992-A2906ED0D22B
 Guid_In_Inf = "[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+-[0-9A-F]+"
-
 
 
 #################################### Functions Definition #################################################
@@ -79,22 +85,24 @@ def SearchGuidsFromList (SrcList, filename):
     #lx match0 = re.search(DefineDirective, line, re.IGNORECASE | re.MULTILINE)
     #lx if match0:
 
-    # for INF and DSC files
+    # Process .inf and .dsc files
     match = re.search(Guid_In_Inf, line, re.IGNORECASE | re.MULTILINE)
     if match:
       #print "Found a matching GUID line"
-      line = re.sub(RegGuidDef, filename + "  ", line)     # Trim out useless part
+      line = re.sub(RegGuidDef, filename + "  ", line)    # Trim out useless part
       line = line.lstrip()
+      line = re.sub("\A(.*?)\s+(.*)", r"\2  \1", line)    # Swap it. lx-'\A' and '?' are both important
       GuidLines.append(line)
       #debug str = raw_input ("Press ENTER key to continue:")
 
-    # for .h file
+    # Process .h and .dec files
     match = re.search(Guid_In_h, line, re.IGNORECASE | re.MULTILINE)
     if match:
       #print "Found a matching GUID line"
-      line = re.sub(DefineDirective, "", line)     # Trim out useless part
-      line = re.sub(Guid_In_h, RegFormatOutput, line)     # Trim out useless part
+      line = re.sub(DefineDirective, "", line)            # Trim out useless part
+      line = re.sub(Guid_In_h, RegFormatOutput, line)     # Convert to registry format
       line = line.lstrip()
+      line = re.sub("\A(.*?)[ =]+(.*)", r"\2  \1", line)  # Swap it. lx-'\A' and '?' are both important
       GuidLines.append(line)
 
   return GuidLines
